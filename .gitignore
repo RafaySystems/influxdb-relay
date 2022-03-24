@@ -1,2 +1,9 @@
+.idea/
 *.swp
-/build
+build
+build/*
+influxdb-relay
+pkg
+pkg/*
+.vscode/
+influxdb-relay.*

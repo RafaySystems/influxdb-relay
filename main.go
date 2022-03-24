@@ -7,28 +7,27 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/influxdata/influxdb-relay/relay"
+	"github.com/vente-privee/influxdb-relay/config"
+	"github.com/vente-privee/influxdb-relay/relayservice"
+)
+
+const (
+	relayVersion = "3.0.1"
 )
 
 var (
-	configFile = flag.String("config", "", "Configuration file to use")
+	usage = func() {
+		fmt.Println("Please, see README for more information about InfluxDB Relay...")
+		flag.PrintDefaults()
+	}
+
+	configFile  = flag.String("config", "", "Configuration file to use")
+	verbose     = flag.Bool("v", false, "If set, InfluxDB Relay will log HTTP requests")
+	versionFlag = flag.Bool("version", false, "Print current InfluxDB Relay version")
 )
 
-func main() {
-	flag.Parse()
-
-	if *configFile == "" {
-		fmt.Fprintln(os.Stderr, "Missing configuration file")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-
-	cfg, err := relay.LoadConfigFile(*configFile)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Problem loading config file:", err)
-	}
-
-	r, err := relay.New(cfg)
+func runRelay(cfg config.Config) {
+	relay, err := relayservice.New(cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -38,9 +37,36 @@ func main() {
 
 	go func() {
 		<-sigChan
-		r.Stop()
+		relay.Stop()
 	}()
 
 	log.Println("starting relays...")
-	r.Run()
+	relay.Run()
+}
+
+func main() {
+	flag.Usage = usage
+	flag.Parse()
+
+	if *versionFlag {
+		fmt.Println("influxdb-relay version " + relayVersion)
+		return
+	}
+
+	// Configuration file is mandatory
+	if *configFile == "" {
+		fmt.Fprintln(os.Stderr, "Missing configuration file")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+
+	// And it has to be loaded in order to continue
+	cfg, err := config.LoadConfigFile(*configFile)
+	if err != nil {
+		log.Println("Version: " + relayVersion)
+		log.Fatal(err.Error())
+	}
+
+	cfg.Verbose = *verbose
+	runRelay(cfg)
 }

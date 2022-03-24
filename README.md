@@ -1,24 +1,104 @@
-# InfluxDB Relay
+# influxdb-relay
 
-This project adds a basic high availability layer to InfluxDB. With the right architecture and disaster recovery processes, this achieves a highly available setup.
+[![License][license-img]][license-href]
 
-*NOTE:* `influxdb-relay` must be built with Go 1.5+
+1. [Overview](#overview)
+2. [Description](#description)
+3. [Requirements](#requirements)
+4. [Setup](#setup)
+5. [Usage](#usage)
+6. [Limitations](#limitations)
+7. [Development](#development)
+8. [Miscellaneous](#miscellaneous)
+
+## Overview
+
+Maintained fork of [influxdb-relay][overview-href] originally developed by
+InfluxData. Replicate InfluxDB data for high availability.
+
+**Be careful, we have deeply changed the configuration file syntax.**
+
+## Description
+
+This project adds a basic high availability layer to InfluxDB. With the right
+architecture and disaster recovery processes, this achieves a highly available
+setup.
+
+## Tested on
+
+- [Go](https://golang.org/doc/install) 1.7.4 to 1.12
+- [InfluxDB](https://docs.influxdata.com/influxdb/v1.7/introduction/installation/) 1.5 to 1.7 (2.x not yet supported)
+
+Other versions will probably work but are untested.
+
+## Setup
+
+### Go
+
+Download the daemon into your `$GOPATH` and install it in `/usr/sbin`.
+
+```sh
+go get -u github.com/vente-privee/influxdb-relay
+cp ${GOPATH}/bin/influxdb-relay /usr/bin/influxdb-relay
+chmod 755 /usr/bin/influxdb-relay
+```
+
+Create the configuration file in `/etc/influxdb-relay`.
+
+```sh
+mkdir -p /etc/influxdb-relay
+cp ${GOPATH}/src/github.com/vente-privee/influxdb-relay/examples/sample.conf \
+   /etc/influxdb-relay/influxdb-relay.conf
+```
+
+### Docker
+
+Build your own image.
+
+```sh
+git clone git@github.com:vente-privee/influxdb-relay
+cd influxdb-relay
+docker build \
+       --file Dockerfile \
+       --rm \
+       --tag influxdb-relay:latest \
+       .
+docker run \
+       --volume /path/to/influxdb-relay.conf:/etc/influxdb-relay/influxdb-relay.conf
+       --rm
+       influxdb-relay:latest
+```
+
+or
+
+Docker pull our image.
+
+```sh
+docker pull vptech/influxdb-relay:latest
+docker run \
+       --volume /path/to/influxdb-relay.conf:/etc/influxdb-relay/influxdb-relay.conf
+       --rm
+       vptech/influxdb-relay:latest
+```
 
 ## Usage
 
-To build from source and run:
+You can find more documentation in [docs](docs) folder.
 
-```sh
-$ # Install influxdb-relay to your $GOPATH/bin
-$ go get -u github.com/influxdata/influxdb-relay
-$ # Edit your configuration file
-$ cp $GOPATH/src/github.com/influxdata/influxdb-relay/sample.toml ./relay.toml
-$ vim relay.toml
-$ # Start relay!
-$ $GOPATH/bin/influxdb-relay -config relay.toml
-```
+* [Architecture](docs/architecture.md)
+* [Buffering](docs/buffering.md)
+* [Caveats](docs/caveats.md)
+* [Recovery](docs/recovery.md)
+* [Filters](docs/filters.md)
+* [Sharding](docs/sharding.md)
 
-## Configuration
+You can find some configurations in [examples](examples) folder.
+
+* [sample.conf](examples/sample.conf)
+* [sample_buffered.conf](examples/sample_buffered.conf)
+* [kapacitor.conf](examples/kapacitor.conf)
+
+### Configuration
 
 ```toml
 [[http]]
@@ -28,18 +108,60 @@ name = "example-http"
 # TCP address to bind to, for HTTP server.
 bind-addr = "127.0.0.1:9096"
 
-# Enable HTTPS requests.
-ssl-combined-pem = "/etc/ssl/influxdb-relay.pem"
+# Timeout for /health route
+# After this time, the host may be considered down
+health-timeout-ms = 10000
 
-# Array of InfluxDB instances to use as backends for Relay.
-output = [
-    # name: name of the backend, used for display purposes only.
-    # location: full URL of the /write endpoint of the backend
-    # timeout: Go-parseable time duration. Fail writes if incomplete in this time.
-    # skip-tls-verification: skip verification for HTTPS location. WARNING: it's insecure. Don't use in production.
-    { name="local1", location="http://127.0.0.1:8086/write", timeout="10s" },
-    { name="local2", location="http://127.0.0.1:7086/write", timeout="10s" },
-]
+# Request limiting (Applied to all backend)
+rate-limit = 5
+burst-limit = 10
+
+# Ping response code, default is 204
+default-ping-response = 200
+
+# Enable HTTPS requests.
+ssl-combined-pem = "/path/to/influxdb-relay.pem"
+
+# InfluxDB instances to use as backend for Relay
+[[http.output]]
+# name: name of the backend, used for display purposes only.
+name = "local-influxdb01"
+
+# location: full URL of the /write endpoint of the backend
+location = "http://127.0.0.1:8086/"
+
+# endpoints: Routes to use on Relay
+# write: Route for standard InfluxDB request
+# write_prom: Route for Prometheus request
+# ping: Route for ping request
+# query: Route fot querying InfluxDB backends
+endpoints = {write="/write", write_prom="/api/v1/prom/write", ping="/ping", query="/query"}
+
+# timeout: Go-parseable time duration. Fail writes if incomplete in this time.
+timeout = "10s"
+
+# skip-tls-verification: skip verification for HTTPS location. WARNING: it's insecure. Don't use in production.
+skip-tls-verification = false
+
+# InfluxDB
+[[http.output]]
+name = "local-influxdb02"
+location = "http://127.0.0.1:7086/"
+endpoints = {write="/write", ping="/ping", query="/query"}
+timeout = "10s"
+
+# Prometheus
+[[http.output]]
+name = "local-influxdb03"
+location = "http://127.0.0.1:6086/"
+endpoints = {write="/write", write_prom="/api/v1/prom/write", ping="/ping", query="/query"}
+timeout = "10s"
+
+[[http.output]]
+name = "local-influxdb04"
+location = "http://127.0.0.1:5086/"
+endpoints = {write="/write", write_prom="/api/v1/prom/write", ping="/ping", query="/query"}
+timeout = "10s"
 
 [[udp]]
 # Name of the UDP server, used for display purposes only.
@@ -54,155 +176,115 @@ read-buffer = 0 # default
 # Precision to use for timestamps
 precision = "n" # Can be n, u, ms, s, m, h
 
-# Array of InfluxDB instances to use as backends for Relay.
-output = [
-    # name: name of the backend, used for display purposes only.
-    # location: host and port of backend.
-    # mtu: maximum output payload size
-    { name="local1", location="127.0.0.1:8089", mtu=512 },
-    { name="local2", location="127.0.0.1:7089", mtu=1024 },
-]
+# InfluxDB instance to use as backend for Relay.
+[[udp.output]]
+# name: name of the backend, used for display purposes only.
+name = "local-influxdb01"
+
+# location: host and port of backend.
+location = "127.0.0.1:8089"
+
+# mtu: maximum output payload size
+mtu = 512
+
+[[udp.output]]
+name = "local-influxdb02"
+location = "127.0.0.1:7089"
+mtu = 1024
 ```
 
-## Description
+InfluxDB Relay is able to forward from a variety of input sources, including:
 
-The architecture is fairly simple and consists of a load balancer, two or more InfluxDB Relay processes and two or more InfluxDB processes. The load balancer should point UDP traffic and HTTP POST requests with the path `/write` to the two relays while pointing GET requests with the path `/query` to the two InfluxDB servers.
+* `influxdb`
+* `prometheus`
 
-The setup should look like this:
+### Administrative tasks
 
-```
-        ┌─────────────────┐                 
-        │writes & queries │                 
-        └─────────────────┘                 
-                 │                          
-                 ▼                          
-         ┌───────────────┐                  
-         │               │                  
-┌────────│ Load Balancer │─────────┐        
-│        │               │         │        
-│        └──────┬─┬──────┘         │        
-│               │ │                │        
-│               │ │                │        
-│        ┌──────┘ └────────┐       │        
-│        │ ┌─────────────┐ │       │┌──────┐
-│        │ │/write or UDP│ │       ││/query│
-│        ▼ └─────────────┘ ▼       │└──────┘
-│  ┌──────────┐      ┌──────────┐  │        
-│  │ InfluxDB │      │ InfluxDB │  │        
-│  │ Relay    │      │ Relay    │  │        
-│  └──┬────┬──┘      └────┬──┬──┘  │        
-│     │    |              |  │     │        
-│     |  ┌─┼──────────────┘  |     │        
-│     │  │ └──────────────┐  │     │        
-│     ▼  ▼                ▼  ▼     │        
-│  ┌──────────┐      ┌──────────┐  │        
-│  │          │      │          │  │        
-└─▶│ InfluxDB │      │ InfluxDB │◀─┘        
-   │          │      │          │           
-   └──────────┘      └──────────┘           
- ```
+#### /admin endpoint
 
+Whereas data manipulation relies on the `/write` endpoint, some other features
+such as database or user management are based on the `/query` endpoint. As
+InfluxDB Relay does not send back a response body to the client(s), we are not
+able to forward all of the features this endpoint provides. Still, we decided
+to expose it through the `/admin` route.
 
-
-The relay will listen for HTTP or UDP writes and write the data to each InfluxDB server via the HTTP write or UDP endpoint, as appropriate. If the write is sent via HTTP, the relay will return a success response as soon as one of the InfluxDB servers returns a success. If any InfluxDB server returns a 4xx response, that will be returned to the client immediately. If all servers return a 5xx, a 5xx will be returned to the client. If some but not all servers return a 5xx that will not be returned to the client. You should monitor each instance's logs for 5xx errors.
-
-With this setup a failure of one Relay or one InfluxDB can be sustained while still taking writes and serving queries. However, the recovery process might require operator intervention.
-
-## Buffering
-
-The relay can be configured to buffer failed requests for HTTP backends.
-The intent of this logic is reduce the number of failures during short outages or periodic network issues.
-> This retry logic is **NOT** sufficient for for long periods of downtime as all data is buffered in RAM
-
-Buffering has the following configuration options (configured per HTTP backend):
-
-* buffer-size-mb -- An upper limit on how much point data to keep in memory (in MB)
-* max-batch-kb -- A maximum size on the aggregated batches that will be submitted (in KB)
-* max-delay-interval -- the max delay between retry attempts per backend.
-    The initial retry delay is 500ms and is doubled after every failure.
-
-If the buffer is full then requests are dropped and an error is logged.
-If a requests makes it into the buffer it is retried until success.
-
-Retries are serialized to a single backend. In addition, writes will be aggregated and batched as long as the body of the request will be less than `max-batch-kb`
-If buffered requests succeed then there is no delay between subsequent attempts.
-
-If the relay stays alive the entire duration of a downed backend server without filling that server's allocated buffer, and the relay can stay online until the entire buffer is flushed, it would mean that no operator intervention would be required to "recover" the data. The data will simply be batched together and written out to the recovered server in the order it was received.
-
-*NOTE*: The limits for buffering are not hard limits on the memory usage of the application, and there will be additional overhead that would be much more challenging to account for. The limits listed are just for the amount of point line protocol (including any added timestamps, if applicable). Factors such as small incoming batch sizes and a smaller max batch size will increase the overhead in the buffer. There is also the general application memory overhead to account for. This means that a machine with 2GB of memory should not have buffers that sum up to _almost_ 2GB.
-
-## Recovery
-
-InfluxDB organizes its data on disk into logical blocks of time called shards. We can use this to create a hot recovery process with zero downtime.
-
-The length of time that shards represent in InfluxDB are typically 1 hour, 1 day, or 7 days, depending on the retention duration, but can be explicitly set when creating the retention policy. For the sake of our example, let's assume shard durations of 1 day.
-
-Let's say one of the InfluxDB servers goes down for an hour on 2016-03-10. Once midnight UTC rolls over, all InfluxDB processes are now writing data to the shard for 2016-03-11 and the file(s) for 2016-03-10 have gone cold for writes. We can then restore things using these steps:
-
-1. Tell the load balancer to stop sending query traffic to the server that was down (this should be done as soon as an outage is detected to prevent partial or inconsistent query returns.)
-2. Create backup of 2016-03-10 shard from a server that was up the entire day
-3. Restore the backup of the shard from the good server to the server that had downtime
-4. Tell the load balancer to resume sending queries to the previously downed server
-
-During this entire process the Relays should be sending current writes to all servers, including the one with downtime.
-
-## Sharding
-
-It's possible to add another layer on top of this kind of setup to shard data. Depending on your needs you could shard on the measurement name or a specific tag like `customer_id`. The sharding layer would have to service both queries and writes.
-
-As this relay does not handle queries, it will not implement any sharding logic. Any sharding would have to be done externally to the relay.
-
-
-## Caveats
-
-While `influxdb-relay` does provide some level of high availability, there are a few scenarios that need to be accounted for:
-
-- `influxdb-relay` will not relay the `/query` endpoint, and this includes schema modification (create database, `DROP`s, etc). This means that databases must be created before points are written to the backends.
-- Continuous queries will still only write their results locally. If a server goes down, the continuous query will have to be backfilled after the data has been recovered for that instance.
-- Overwriting points is potentially unpredictable. For example, given servers A and B, if B is down, and point X is written (we'll call the value X1) just before B comes back online, that write is queued behind every other write that occurred while B was offline. Once B is back online, the first buffered write succeeds, and all new writes are now allowed to pass-through. At this point (before X1 is written to B), X is written again (with value X2 this time) to both A and B. When the relay reaches the end of B's buffered writes, it will write X (with value X1) to B... At this point A now has X2, but B has X1.
-  - It is probably best to avoid re-writing points (if possible). Otherwise, please be aware that overwriting the same field for a given point can lead to data differences.
-  - This could potentially be mitigated by waiting for the buffer to flush before opening writes back up to being passed-through.
-
-## Building
-
-The recommended method for building `influxdb-relay` is to use Docker
-and the included `Dockerfile_build_ubuntu64` Dockerfile, which
-includes all of the necessary dependencies.
-
-To build the docker image, you can run:
+It is now possible to query the `/admin` endpoint. Its usage is the same as the
+standard `/query` Influx DB enpoint:
 
 ```
-docker build -f Dockerfile_build_ubuntu64 -t influxdb-relay-builder:latest .
+curl -X POST "http://127.0.0.1:9096/admin" --data-urlencode 'q=CREATE DATABASE some_database'
 ```
 
-And then to build the project:
+Errors will be logged just like regular `/write` queries. The HTTP response
+bodies will not be forwarded back to the clients.
 
-```
-docker run --rm -v $(pwd):/root/go/src/github.com/influxdata/influxdb-relay influxdb-relay-builder
-```
+#### /health endpoint
 
-*NOTE* By default, builds will be for AMD64 Linux (since the container
-is running AMD64 Linux), but to change the target platform or
-architecture, use the `--platform` and `--arch` CLI options.
+This endpoint provides a quick way to check the state of all the backends.
+It will return a JSON object detailing the status of the backends like this : 
 
-Which should immediately call the included `build.py` build script,
-and leave any build output in the `./build` directory. To see a list
-of available build commands, append a `--help` to the command above.
-
-```
-docker run -v $(pwd):/root/go/src/github.com/influxdata/influxdb-relay influxdb-relay-builder --help
-```
-
-### Packages
-
-To build system packages for Linux (`deb`, `rpm`, etc), use the
-`--package` option:
-
-```
-docker run -v $(pwd):/root/go/src/github.com/influxdata/influxdb-relay influxdb-relay-builder --package
+```json
+{
+  "status": "problem",
+  "problem": {
+    "local-influxdb01": "KO. Get http://influxdb/ping: dial tcp: lookup influxdb on 0.0.0.0:8086: no such host"
+  },
+  "healthy": {
+    "local-influxdb02": "OK. Time taken 3ms"
+  }
+}
 ```
 
-To build packages for other platforms or architectures, use the
-`--platform` and `--arch` options. For example, to build an amd64
-package for Mac OS X, use the options `--package --platform darwin`.
+If the relay encounters an error while checking a backend, this backend will be reported with the associated error in the `problems` object.
+The backends wich the relay was able to communicate with will be reported in the healthy object.
 
+The status field is a summary of the general state of the backends, the defined states are as follows:
+* `healthy`: no errors were encountered
+* `problem`: some backends, but no all of them, returned errors
+* `critical`: every backend returned an error
+
+### Filters
+
+We allow tags and measurements filtering through regular expressions. Please,
+take a look at [this document](docs/filters.md) for more information.
+
+## Limitations
+
+So far, this is compatible with Debian, RedHat, and other derivatives.
+
+## Development
+
+Please read carefully [CONTRIBUTING.md][contribute-href] before making a merge
+request.
+
+Clone repository into your `$GOPATH`.
+
+```sh
+mkdir -p ${GOPATH}/src/github.com/vente-privee
+cd ${GOPATH}/src/github.com/vente-privee
+git clone git@github.com:vente-privee/influxdb-relay
+```
+
+Enter the directory and build the daemon.
+
+```sh
+cd ${GOPATH}/src/github.com/vente-privee/influxdb-relay
+go build -a -ldflags '-extldflags "-static"' -o influxdb-relay
+```
+
+## Miscellaneous
+
+```
+    ╚⊙ ⊙╝
+  ╚═(███)═╝
+ ╚═(███)═╝
+╚═(███)═╝
+ ╚═(███)═╝
+  ╚═(███)═╝
+   ╚═(███)═╝
+```
+
+[license-img]: https://img.shields.io/badge/license-MIT-blue.svg
+[license-href]: LICENSE
+[overview-href]: https://github.com/influxdata/influxdb-relay
+[contribute-href]: CONTRIBUTING.md

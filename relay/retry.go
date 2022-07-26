@@ -3,7 +3,6 @@ package relay
 import (
 	"bytes"
 	"net/http"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,7 +22,7 @@ type Operation func() error
 // There is no delay between attempts of different operations.
 type retryBuffer struct {
 	buffering int32
-	flushing int32
+	flushing  int32
 
 	initialInterval time.Duration
 	multiplier      time.Duration
@@ -51,12 +50,17 @@ func newRetryBuffer(size, batch int, max time.Duration, p poster) *retryBuffer {
 	return r
 }
 
-func (r *retryBuffer) getStats() map[string]string {
-	stats := make(map[string]string)
-	stats["buffering"] = strconv.FormatInt(int64(r.buffering), 10)
-	for k, v := range r.list.getStats() {
-		stats[k] = v
-	}
+type retryStats struct {
+	Buffering int64 `json:"buffering"`
+	MaxSize   int64 `json:"maxSize"`
+	Size      int64 `json:"size"`
+}
+
+func (r *retryBuffer) getStats() stats {
+	stats := retryStats{}
+	stats.Buffering = int64(r.buffering)
+	stats.MaxSize = int64(r.list.maxSize)
+	stats.Size = int64(r.list.size)
 	return stats
 }
 
@@ -72,14 +76,17 @@ func (r *retryBuffer) post(buf []byte, query string, auth string, endpoint strin
 	}
 
 	// already buffering or failed request
-	_, err := r.list.add(buf, query, auth, endpoint)
+	batch, err := r.list.add(buf, query, auth, endpoint)
 
-	// batch.wg.Wait()
+	if batch != nil {
+		defer batch.wg.Wait()
+	}
+
 	// We do not wait for the WaitGroup because we don't want
 	// to leave the connection open
-	// The client will receive a 202 which closes the connection and
+	// The client will receive a 204 which closes the connection and
 	// invites him to send further requests
-	return &responseData{StatusCode: http.StatusAccepted}, err
+	return &responseData{StatusCode: http.StatusNoContent}, err
 }
 
 func (r *retryBuffer) run() {
@@ -105,8 +112,8 @@ func (r *retryBuffer) run() {
 				break
 			}
 
-      resp, err := r.p.post(buf.Bytes(), batch.query, batch.auth, batch.endpoint)
-      if err == nil && resp.StatusCode/100 != 5 {
+			resp, err := r.p.post(buf.Bytes(), batch.query, batch.auth, batch.endpoint)
+			if err == nil && resp.StatusCode/100 != 5 {
 				batch.resp = resp
 				atomic.StoreInt32(&r.buffering, 0)
 				batch.wg.Done()
@@ -166,12 +173,6 @@ func newBufferList(maxSize, maxBatch int) *bufferList {
 	}
 }
 
-func (l *bufferList) getStats() map[string]string {
-	stats := make(map[string]string)
-	stats["size"] = strconv.FormatInt(int64(l.size), 10)
-	stats["maxSize"] = strconv.FormatInt(int64(l.maxSize), 10)
-	return stats
-}
 
 // Empty the buffer to drop any buffered query
 // This allows to flush 'impossible' queries which loop infinitely
@@ -237,6 +238,6 @@ func (l *bufferList) add(buf []byte, query string, auth string, endpoint string)
 		b.bufs = append(b.bufs, buf)
 	}
 
-	l.cond.L.Unlock()
+	defer l.cond.L.Unlock()
 	return *cur, nil
 }

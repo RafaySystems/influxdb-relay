@@ -7,12 +7,12 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/vente-privee/influxdb-relay/config"
-	"github.com/vente-privee/influxdb-relay/relayservice"
+	"github.com/strike-team/influxdb-relay/config"
+	"github.com/strike-team/influxdb-relay/relayservice"
 )
 
 const (
-	relayVersion = "3.0.1"
+	relayVersion = "3.0.2"
 )
 
 var (

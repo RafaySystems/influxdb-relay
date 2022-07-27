@@ -2,9 +2,7 @@ package relay
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -14,18 +12,19 @@ import (
 	"github.com/influxdata/influxdb/models"
 )
 
+type status struct {
+	Status map[string]stats `json:"status"`
+}
+
 func (h *HTTP) handleStatus(w http.ResponseWriter, r *http.Request, _ time.Time) {
 	if r.Method == http.MethodGet || r.Method == http.MethodHead {
-		// old but gold
-		st := make(map[string]map[string]string)
+		st := status{Status: make(map[string]stats)}
 
 		for _, b := range h.backends {
-			st[b.name] = b.poster.getStats()
+			st.Status[b.name] = b.poster.getStats()
 		}
 
-		j, _ := json.Marshal(st)
-
-		jsonResponse(w, response{http.StatusOK, fmt.Sprintf("\"status\": %s", string(j))})
+		jsonResponse(w, response{http.StatusOK, st})
 	} else {
 		jsonResponse(w, response{http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed)})
 		return
@@ -87,10 +86,12 @@ func (h *HTTP) handleHealth(w http.ResponseWriter, _ *http.Request, _ time.Time)
 				return
 			}
 			if res.StatusCode/100 != 2 {
-				healthCheck.err = errors.New("Unexpected error code " + strconv.FormatInt(int64(res.StatusCode), 10))
+				//healthCheck.err = errors.New("Unexpected error code " + strconv.FormatInt(int64(res.StatusCode), 10))
+				healthCheck.err = errors.New("Unexpected error code " + strconv.Itoa(res.StatusCode))
 			}
 			healthCheck.duration = time.Since(start)
 			responses <- healthCheck
+			return
 		}()
 	}
 
@@ -379,6 +380,8 @@ func (h *HTTP) handleStandard(w http.ResponseWriter, r *http.Request, start time
 }
 
 func (h *HTTP) handleProm(w http.ResponseWriter, r *http.Request, _ time.Time) {
+	log.Printf("request url : %v \n", r.URL)
+
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
 		if r.Method == http.MethodOptions {
@@ -401,7 +404,18 @@ func (h *HTTP) handleProm(w http.ResponseWriter, r *http.Request, _ time.Time) {
 
 	var responses = make(chan *responseData, len(h.backends))
 
-	for _, b := range h.backends {
+	params := r.URL.Query()
+	urlType := "pod-node"
+	if params["type"] != nil {
+		urlType = params["type"][0]
+	}
+	if !backendTypes[urlType] {
+		urlType = "pod-node"
+	}
+
+	targetBackends := h.typedBackends[urlType]
+
+	for _, b := range targetBackends {
 		b := b
 
 		go func() {

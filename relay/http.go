@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/influxdata/influxdb/models"
-	"github.com/vente-privee/influxdb-relay/config"
+	"github.com/strike-team/influxdb-relay/config"
 )
 
 // HTTP is a relay for HTTP influxdb writes
@@ -39,6 +39,8 @@ type HTTP struct {
 	l       net.Listener
 
 	backends []*httpBackend
+
+	typedBackends map[string][]*httpBackend
 
 	start  time.Time
 	log    bool
@@ -64,13 +66,20 @@ const (
 )
 
 var (
+	// "cost-metric" or "service-mesh" or "pod-node"
+	backendTypes = map[string]bool{
+		"pod-node":     true,
+		"cost-metric":  true,
+		"service-mesh": true,
+	}
+
 	handlers = map[string]relayHandlerFunc{
 		"/write":             (*HTTP).handleStandard,
 		"/api/v1/prom/write": (*HTTP).handleProm,
 		"/ping":              (*HTTP).handlePing,
 		"/status":            (*HTTP).handleStatus,
 		"/admin":             (*HTTP).handleAdmin,
-		"/admin/flush":				(*HTTP).handleFlush,
+		"/admin/flush":       (*HTTP).handleFlush,
 		"/health":            (*HTTP).handleHealth,
 	}
 
@@ -114,15 +123,17 @@ func NewHTTP(cfg config.HTTPConfig, verbose bool, fs config.Filters) (Relay, err
 		h.schema = "https"
 	}
 
+	h.typedBackends = make(map[string][]*httpBackend)
 	// For each output specified in the config, we are going to create a backend
 	for i := range cfg.Outputs {
 		backend, err := newHTTPBackend(&cfg.Outputs[i], fs)
 		if err != nil {
 			return nil, err
 		}
-
+		h.typedBackends[backend.urlType] = append(h.typedBackends[backend.urlType], backend)
 		h.backends = append(h.backends, backend)
 	}
+	fmt.Println(h.typedBackends)
 
 	// If a RateLimit is specified, create a new limiter
 	if cfg.RateLimit != 0 {
@@ -236,9 +247,16 @@ func jsonResponse(w http.ResponseWriter, r response) {
 	_, _ = w.Write(data)
 }
 
+type stats interface {
+}
+
 type poster interface {
 	post([]byte, string, string, string) (*responseData, error)
-	getStats() map[string]string
+	getStats() stats
+}
+
+type simpleStats struct {
+	Location string `json:"location"`
 }
 
 type simplePoster struct {
@@ -264,10 +282,8 @@ func newSimplePoster(location string, timeout time.Duration, skipTLSVerification
 	}
 }
 
-func (s *simplePoster) getStats() map[string]string {
-	v := make(map[string]string)
-	v["location"] = s.location
-	return v
+func (s *simplePoster) getStats() stats {
+	return simpleStats{Location: s.location}
 }
 
 func (s *simplePoster) post(buf []byte, query string, auth string, endpoint string) (*responseData, error) {
@@ -285,6 +301,7 @@ func (s *simplePoster) post(buf []byte, query string, auth string, endpoint stri
 
 	resp, err := s.client.Do(req)
 	if err != nil {
+		log.Printf(" Error -  %v  ", err.Error())
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -293,7 +310,7 @@ func (s *simplePoster) post(buf []byte, query string, auth string, endpoint stri
 	if err != nil {
 		return nil, err
 	}
-
+	log.Printf(" URL : %v  response code : %v  ", fmt.Sprintf("%v%v?%v", s.location, endpoint, query), resp.StatusCode)
 	return &responseData{
 		ContentType:     resp.Header.Get("Content-Type"),
 		ContentEncoding: resp.Header.Get("Content-Encoding"),
@@ -309,6 +326,7 @@ type httpBackend struct {
 	admin     string
 	endpoints config.HTTPEndpointConfig
 	location  string
+	urlType   string
 
 	tagRegexps         []*regexp.Regexp
 	measurementRegexps []*regexp.Regexp
@@ -317,33 +335,33 @@ type httpBackend struct {
 // validateRegexps checks if a request on this backend matches
 // all the tag regular expressions for this backend
 func (b *httpBackend) validateRegexps(ps models.Points) error {
-  // For each point
-  for _, p := range ps {
-    // Check if the measurement of each point
-    // matches ALL measurement regular expressions
-    m := p.Name()
-    for _, r := range b.measurementRegexps {
-      if !r.Match(m) {
-        return errors.New("bad measurement")
-      }
-    }
+	// For each point
+	for _, p := range ps {
+		// Check if the measurement of each point
+		// matches ALL measurement regular expressions
+		m := p.Name()
+		for _, r := range b.measurementRegexps {
+			if !r.Match(m) {
+				return errors.New("bad measurement")
+			}
+		}
 
-    // For each tag of each point
-    for _, t := range p.Tags() {
-      // Check if each tag of each point
-      // matches ALL tags regular expressions
-      for _, r := range b.tagRegexps {
-        if !r.Match(t.Key) {
-          return errors.New("bad tag")
-        }
-      }
-    }
-  }
+		// For each tag of each point
+		for _, t := range p.Tags() {
+			// Check if each tag of each point
+			// matches ALL tags regular expressions
+			for _, r := range b.tagRegexps {
+				if !r.Match(t.Key) {
+					return errors.New("bad tag")
+				}
+			}
+		}
+	}
 
-  return nil
+	return nil
 }
 
-func (b *httpBackend) getRetryBuffer() *retryBuffer	{
+func (b *httpBackend) getRetryBuffer() *retryBuffer {
 	if p, ok := b.poster.(*retryBuffer); ok {
 		return p
 	}
@@ -355,6 +373,10 @@ func newHTTPBackend(cfg *config.HTTPOutputConfig, fs config.Filters) (*httpBacke
 	// Get default name
 	if cfg.Name == "" {
 		cfg.Name = cfg.Location
+	}
+
+	if cfg.Urltype == "" {
+		cfg.Urltype = "pod-node"
 	}
 
 	// Set a timeout
@@ -413,8 +435,9 @@ func newHTTPBackend(cfg *config.HTTPOutputConfig, fs config.Filters) (*httpBacke
 		name:               cfg.Name,
 		tagRegexps:         tagRegexps,
 		measurementRegexps: measurementRegexps,
-		endpoints: cfg.Endpoints,
-		location:  cfg.Location,
+		endpoints:          cfg.Endpoints,
+		location:           cfg.Location,
+		urlType:            cfg.Urltype,
 	}, nil
 }
 

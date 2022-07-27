@@ -6,7 +6,6 @@ WORKDIR /workspace
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum
-COPY default.conf relay.conf
 
 # setup github user and token
 ARG BUILD_USR="nothing"
@@ -43,6 +42,13 @@ COPY config/ config/
 # Build
 RUN GOPRIVATE=github.com/RafaySystems/* CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -ldflags "-X google.golang.org/protobuf/reflect/protoregistry.conflictPolicy=warn" -a -o influxdb-relay main.go
 
+# Before copying the Go binary directly to the final image,
+# add them to the intermdediate upx image
+FROM rafaysystems/upx:latest as upx
+COPY --from=builder /workspace/influxdb-relay /influxdb-relay.orig
+
+# Compress the binary and copy it to final image
+RUN upx --best --lzma -o /influxdb-relay /influxdb-relay.orig
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
@@ -50,9 +56,5 @@ RUN GOPRIVATE=github.com/RafaySystems/* CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO
 ## use base:debug for shell access
 FROM gcr.io/distroless/static:latest
 WORKDIR /
-COPY --from=builder /workspace/influxdb-relay .
-#COPY --from=builder /workspace/relay.conf /etc/influxdb-relay/influxdb-relay.conf
+COPY --from=upx /influxdb-relay .
 ENTRYPOINT ["/influxdb-relay"]
-
-CMD ["-config", "/etc/influxdb-relay/influxdb-relay.conf" ]
-

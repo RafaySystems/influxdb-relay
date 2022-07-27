@@ -64,8 +64,9 @@ docker build \
        --tag influxdb-relay:latest \
        .
 docker run \
-       --volume /path/to/influxdb-relay.conf:/etc/influxdb-relay/influxdb-relay.conf
-       --rm
+       --volume /path/to/influxdb-relay.conf:/etc/influxdb-relay/influxdb-relay.conf \
+       --publish 9096:9096 \
+       --rm \
        influxdb-relay:latest
 ```
 
@@ -76,8 +77,9 @@ Docker pull our image.
 ```sh
 docker pull vptech/influxdb-relay:latest
 docker run \
-       --volume /path/to/influxdb-relay.conf:/etc/influxdb-relay/influxdb-relay.conf
-       --rm
+       --volume /path/to/influxdb-relay.conf:/etc/influxdb-relay/influxdb-relay.conf \
+       --publish 9096:9096 \
+       --rm \
        vptech/influxdb-relay:latest
 ```
 
@@ -106,7 +108,7 @@ You can find some configurations in [examples](examples) folder.
 name = "example-http"
 
 # TCP address to bind to, for HTTP server.
-bind-addr = "127.0.0.1:9096"
+bind-addr = "0.0.0.0:9096"
 
 # Timeout for /health route
 # After this time, the host may be considered down
@@ -168,7 +170,7 @@ timeout = "10s"
 name = "example-udp"
 
 # UDP address to bind to.
-bind-addr = "127.0.0.1:9096"
+bind-addr = "0.0.0.0:9096"
 
 # Socket buffer size for incoming connections.
 read-buffer = 0 # default
@@ -221,7 +223,7 @@ bodies will not be forwarded back to the clients.
 #### /health endpoint
 
 This endpoint provides a quick way to check the state of all the backends.
-It will return a JSON object detailing the status of the backends like this : 
+It will return a JSON object detailing the status of the backends like this :
 
 ```json
 {

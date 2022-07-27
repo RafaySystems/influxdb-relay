@@ -380,7 +380,6 @@ func (h *HTTP) handleStandard(w http.ResponseWriter, r *http.Request, start time
 }
 
 func (h *HTTP) handleProm(w http.ResponseWriter, r *http.Request, _ time.Time) {
-	log.Printf("request url : %v \n", r.URL)
 
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)

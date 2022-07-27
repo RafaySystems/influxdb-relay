@@ -85,7 +85,7 @@ type HTTPOutputConfig struct {
 	Endpoints HTTPEndpointConfig `toml:"endpoints"`
 
 	// Location should be set to the hostname for the influxdb endpoint (for example https://influxdb.com/)
-	Urltype string `toml:"urltype"`
+	Urltype string `toml:"url-type"`
 
 	// Timeout sets a per-backend timeout for write requests (default: 10s)
 	// The format used is the same seen in time.ParseDuration

@@ -51,7 +51,7 @@ RUN GOPRIVATE=github.com/RafaySystems/* CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO
 FROM gcr.io/distroless/static:latest
 WORKDIR /
 COPY --from=builder /workspace/influxdb-relay .
-COPY --from=builder /workspace/relay.conf /etc/influxdb-relay/influxdb-relay.conf
+#COPY --from=builder /workspace/relay.conf /etc/influxdb-relay/influxdb-relay.conf
 ENTRYPOINT ["/influxdb-relay"]
 
 CMD ["-config", "/etc/influxdb-relay/influxdb-relay.conf" ]

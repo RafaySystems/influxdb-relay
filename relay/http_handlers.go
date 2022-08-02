@@ -398,9 +398,6 @@ func (h *HTTP) handleProm(w http.ResponseWriter, r *http.Request, _ time.Time) {
 
 	outBytes := bodyBuf.Bytes()
 
-	var wg sync.WaitGroup
-	wg.Add(len(h.backends))
-
 	var responses = make(chan *responseData, len(h.backends))
 
 	params := r.URL.Query()
@@ -413,6 +410,9 @@ func (h *HTTP) handleProm(w http.ResponseWriter, r *http.Request, _ time.Time) {
 	}
 
 	targetBackends := h.typedBackends[urlType]
+
+	var wg sync.WaitGroup
+	wg.Add(len(targetBackends))
 
 	for _, b := range targetBackends {
 		b := b

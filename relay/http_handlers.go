@@ -405,6 +405,7 @@ func (h *HTTP) handleProm(w http.ResponseWriter, r *http.Request, _ time.Time) {
 	if params["type"] != nil {
 		urlType = params["type"][0]
 	}
+
 	if !backendTypes[urlType] {
 		urlType = "pod-node"
 	}
@@ -425,8 +426,8 @@ func (h *HTTP) handleProm(w http.ResponseWriter, r *http.Request, _ time.Time) {
 
 				responses <- &responseData{}
 			} else {
-				if resp.StatusCode/100 == 5 {
-					log.Printf("5xx response for relay %q backend %q: %v", h.Name(), b.name, resp.StatusCode)
+				if resp.StatusCode/100 == 5 || resp.StatusCode/100 == 4 {
+					log.Printf("5xx/4xx response for relay %q backend %q: %v", h.Name(), b.name, resp.StatusCode)
 				}
 
 				responses <- resp

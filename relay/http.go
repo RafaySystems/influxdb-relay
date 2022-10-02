@@ -310,7 +310,9 @@ func (s *simplePoster) post(buf []byte, query string, auth string, endpoint stri
 	if err != nil {
 		return nil, err
 	}
-	log.Printf(" URL : %v  response code : %v  ", fmt.Sprintf("%v%v?%v", s.location, endpoint, query), resp.StatusCode)
+
+	//log.Printf(" URL : %v  response code : %v  ", fmt.Sprintf("%v%v?%v", s.location, endpoint, query), resp.StatusCode)
+
 	return &responseData{
 		ContentType:     resp.Header.Get("Content-Type"),
 		ContentEncoding: resp.Header.Get("Content-Encoding"),

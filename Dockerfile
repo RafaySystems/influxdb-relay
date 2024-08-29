@@ -1,6 +1,6 @@
 
 # Build the manager binary
-FROM golang:1.17.6 as builder
+FROM --platform=$BUILDPLATFORM golang:1.17.6 as builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -41,7 +41,8 @@ COPY config/ config/
 
 
 # Build
-RUN GOPRIVATE=github.com/RafaySystems/* CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -ldflags "-X google.golang.org/protobuf/reflect/protoregistry.conflictPolicy=warn" -a -o influxdb-relay main.go
+ARG TARGETARCH TARGETOS
+RUN GOPRIVATE=github.com/RafaySystems/* CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags "-X google.golang.org/protobuf/reflect/protoregistry.conflictPolicy=warn" -a -o influxdb-relay main.go
 
 
 # Use distroless as minimal base image to package the manager binary

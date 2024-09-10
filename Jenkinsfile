@@ -41,7 +41,12 @@
             //tag = tag + "-" + "${env.BUILD_NUMBER}"
             //dockerImage = docker.build("registry.dev.rafay-edge.net:5000/rafay/cluster-scheduler:" + tag, "--build-arg BUILD_USR=${env.BUILD_USER} --build-arg BUILD_PWD=${env.BUILD_PASSWORD} .")
             withCredentials([usernamePassword(credentialsId: 'jenkinsrafaygithub', passwordVariable: 'passWord', usernameVariable: 'userName')]) {
-            dockerImage = docker.build("registry.dev.rafay-edge.net:5000/rafay/influxdb-relay:" + tag, '--pull --build-arg BUILD_USR=${userName} --build-arg BUILD_PWD=${passWord} .')
+              docker.withRegistry(registryUrl, registryCredential) {
+                withEnv(["TAG=${tag}"]) {
+                  sh("docker buildx create --name influx --use")
+                  sh('docker buildx build --provenance=false --build-arg BUILD_USR=$userName --build-arg BUILD_PWD=$passWord --tag registry.dev.rafay-edge.net/rafay/influxdb-relay:"$TAG" --load -f ./Dockerfile .')
+                }
+              }
           }
         }
       }
@@ -49,13 +54,25 @@
       stage('Pushning image') {
         steps{
           script {
-              docker.withRegistry(registryUrl, registryCredential ) {
-              dockerImage.push()
-              println dockerImage.imageName()
-              println dockerImage.id
-              DOCKER_IMAGE = dockerImage.id
-              sh("docker rmi ${DOCKER_IMAGE}")
+            tag = "${env.GIT_BRANCH}"
+            tags = tag.split("/")
+            tag = tags[tags.size() - 1] + "-" + "${env.BUILD_NUMBER}"
+            withCredentials([usernamePassword(credentialsId: 'jenkinsrafaygithub', passwordVariable: 'passWord', usernameVariable: 'userName')]) {
+              docker.withRegistry(registryUrl, registryCredential) {
+                withEnv(["TAG=${tag}"]) {
+                  sh("docker buildx create --name influx --use")
+                  sh('docker buildx build --platform=linux/arm64,linux/amd64 --provenance=false --build-arg BUILD_USR=$userName --build-arg BUILD_PWD=$passWord --tag registry.dev.rafay-edge.net/rafay/influxdb-relay:"$TAG" --push -f ./Dockerfile .')
+                }
               }
+            }
+
+              // docker.withRegistry(registryUrl, registryCredential ) {
+              // dockerImage.push()
+              // println dockerImage.imageName()
+              // println dockerImage.id
+              // DOCKER_IMAGE = dockerImage.id
+              // sh("docker rmi ${DOCKER_IMAGE}")
+              // }
           }
         }
       }
@@ -70,6 +87,16 @@
         slackSend channel: "#build",
         color: 'RED',
         message: "Attention ${env.JOB_NAME} ${env.BUILD_NUMBER} has failed."
+      }
+      always {
+        script {
+          tag = "${env.GIT_BRANCH}"
+          tags = tag.split("/")
+          tag = tags[tags.size() - 1] + "-" + "${env.BUILD_NUMBER}"
+          withEnv(["TAG=${tag}"]) {
+            sh('docker rmi registry.dev.rafay-edge.net/rafay/influxdb-relay:"$TAG"')
+          }
+        }
       }
     }
 }

@@ -428,6 +428,11 @@ func (h *HTTP) handleProm(w http.ResponseWriter, r *http.Request, _ time.Time) {
 			} else {
 				if resp.StatusCode/100 == 5 || resp.StatusCode/100 == 4 {
 					log.Printf("5xx/4xx response for relay %q backend %q: %v", h.Name(), b.name, resp.StatusCode)
+					respBuf := getBuf()
+					_, _ = respBuf.ReadFrom(r.Body)
+					respBytes := respBuf.Bytes()
+					resp.Body = respBytes
+					log.Printf("5xx/4xx url: %q request: %q response: %q", r.URL.RawPath, string(outBytes), string(respBytes))
 				}
 
 				responses <- resp

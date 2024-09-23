@@ -430,13 +430,10 @@ func (h *HTTP) handleProm(w http.ResponseWriter, r *http.Request, _ time.Time) {
 			} else {
 				if resp.StatusCode >= 400 {
 					log.Printf("5xx/4xx response for relay %q backend %q: %v", h.Name(), b.name, resp.StatusCode)
-					if r.Body == nil {
+					if resp.Body == nil {
 						log.Printf("Empty body in request for influx %q write", b.name)
 					} else {
-						_, _ = respBuf.ReadFrom(r.Body)
-						respBytes := respBuf.Bytes()
-						resp.Body = respBytes
-						log.Printf("5xx/4xx url: %q request: %q response: %q", r.URL.RawPath, string(outBytes), string(respBytes))
+						log.Printf("5xx/4xx url: %q response: %q", r.URL.String(), string(resp.Body))
 					}
 				}
 				responses <- resp

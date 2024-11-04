@@ -398,6 +398,8 @@ func (h *HTTP) handleProm(w http.ResponseWriter, r *http.Request, _ time.Time) {
 
 	outBytes := bodyBuf.Bytes()
 
+	respBuf := getBuf()
+
 	var responses = make(chan *responseData, len(h.backends))
 
 	params := r.URL.Query()
@@ -426,10 +428,14 @@ func (h *HTTP) handleProm(w http.ResponseWriter, r *http.Request, _ time.Time) {
 
 				responses <- &responseData{}
 			} else {
-				if resp.StatusCode/100 == 5 || resp.StatusCode/100 == 4 {
+				if resp.StatusCode >= 400 {
 					log.Printf("5xx/4xx response for relay %q backend %q: %v", h.Name(), b.name, resp.StatusCode)
+					if resp.Body == nil {
+						log.Printf("Empty body in request for influx %q write", b.name)
+					} else {
+						log.Printf("5xx/4xx url: %q response: %q", r.URL.String(), string(resp.Body))
+					}
 				}
-
 				responses <- resp
 			}
 		}()
@@ -439,6 +445,7 @@ func (h *HTTP) handleProm(w http.ResponseWriter, r *http.Request, _ time.Time) {
 		wg.Wait()
 		close(responses)
 		putBuf(bodyBuf)
+		putBuf(respBuf)
 	}()
 
 	var errResponse *responseData

@@ -495,6 +495,7 @@ type bufferSizeRequestsCollector struct {
 }
 
 func newBufferSizeRequestsCollector() *bufferSizeRequestsCollector {
+	log.Print("in newBufferSizeRequestsCollector()")
 	collector := &bufferSizeRequestsCollector{
 		bufferSizeRequestsMetric: prometheus.NewDesc(
 			"buffer_size",
@@ -504,22 +505,28 @@ func newBufferSizeRequestsCollector() *bufferSizeRequestsCollector {
 		),
 	}
 	prometheus.MustRegister(collector)
+	log.Printf("in newBufferSizeRequestsCollector() collector=%+v", collector)
 	return collector
 }
 
 func (collector *bufferSizeRequestsCollector) Describe(ch chan<- *prometheus.Desc) {
+	log.Printf("in Describe() collector.bufferSizeRequestsMetric=%+v", collector.bufferSizeRequestsMetric)
 	ch <- collector.bufferSizeRequestsMetric
 }
 
 func (collector *bufferSizeRequestsCollector) Collect(ch chan<- prometheus.Metric) {
 	bufferMetric := prometheus.MustNewConstMetric(collector.bufferSizeRequestsMetric, prometheus.GaugeValue, collector.bufferSize)
+	log.Printf("in Collect() bufferMetric=%v collector.bufferSize=%v", bufferMetric, collector.bufferSize)
 	ch <- bufferMetric
 }
 
 func (h *HTTP) handleMetrics(w http.ResponseWriter, r *http.Request, _ time.Time) {
+	log.Printf("in handleMetrics() r=%+v", r)
 	if r.Method == http.MethodGet || r.Method == http.MethodHead {
+		log.Print("in handleMetrics() calling promhttp.Hanlder()")
 		promhttp.Handler().ServeHTTP(w, r)
 	} else {
+		log.Print("in handleMetrics() calling jsonResponse()")
 		jsonResponse(w, response{http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed)})
 		return
 	}

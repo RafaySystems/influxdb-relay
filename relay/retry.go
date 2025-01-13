@@ -2,6 +2,7 @@ package relay
 
 import (
 	"bytes"
+	"log"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -167,6 +168,7 @@ type bufferList struct {
 }
 
 func newBufferList(maxSize, maxBatch int) *bufferList {
+	log.Printf("in newBufferList() maxSize=%v, maxBatch=%v", maxSize, maxBatch)
 	return &bufferList{
 		cond:     sync.NewCond(new(sync.Mutex)),
 		metric:   newBufferSizeRequestsCollector(),
@@ -194,6 +196,7 @@ func (l *bufferList) pop() *batch {
 	l.head = l.head.next
 	l.size -= b.size
 	l.metric.bufferSize = float64(l.size)
+	log.Printf("in pop() l=%+v", l)
 
 	l.cond.L.Unlock()
 
@@ -210,6 +213,7 @@ func (l *bufferList) add(buf []byte, query string, auth string, endpoint string)
 
 	l.size += len(buf)
 	l.metric.bufferSize = float64(l.size)
+	log.Printf("in add() l=%+v", l)
 	l.cond.Signal()
 
 	var cur **batch

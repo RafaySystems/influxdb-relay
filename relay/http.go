@@ -126,9 +126,10 @@ func NewHTTP(cfg config.HTTPConfig, verbose bool, fs config.Filters) (Relay, err
 	}
 
 	h.typedBackends = make(map[string][]*httpBackend)
+	metric := newBufferSizeRequestsCollector()
 	// For each output specified in the config, we are going to create a backend
 	for i := range cfg.Outputs {
-		backend, err := newHTTPBackend(&cfg.Outputs[i], fs)
+		backend, err := newHTTPBackend(&cfg.Outputs[i], fs, metric)
 		if err != nil {
 			return nil, err
 		}
@@ -373,7 +374,7 @@ func (b *httpBackend) getRetryBuffer() *retryBuffer {
 	return nil
 }
 
-func newHTTPBackend(cfg *config.HTTPOutputConfig, fs config.Filters) (*httpBackend, error) {
+func newHTTPBackend(cfg *config.HTTPOutputConfig, fs config.Filters, metric *bufferSizeRequestsCollector) (*httpBackend, error) {
 	// Get default name
 	if cfg.Name == "" {
 		cfg.Name = cfg.Location
@@ -395,7 +396,6 @@ func newHTTPBackend(cfg *config.HTTPOutputConfig, fs config.Filters) (*httpBacke
 
 	// Get underlying Poster instance
 	var p poster = newSimplePoster(cfg.Location, timeout, cfg.SkipTLSVerification)
-	metric := newBufferSizeRequestsCollector()
 
 	// If configured, create a retryBuffer per backend.
 	// This way we serialize retries against each backend.

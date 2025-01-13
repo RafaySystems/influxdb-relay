@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"golang.org/x/time/rate"
 	"io/ioutil"
 	"log"
 	"net"
@@ -18,6 +17,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/time/rate"
 
 	"github.com/influxdata/influxdb/models"
 	"github.com/strike-team/influxdb-relay/config"
@@ -81,6 +82,7 @@ var (
 		"/admin":             (*HTTP).handleAdmin,
 		"/admin/flush":       (*HTTP).handleFlush,
 		"/health":            (*HTTP).handleHealth,
+		"/buffer/metrics":    (*HTTP).handleMetrics,
 	}
 
 	middlewares = []relayMiddleware{

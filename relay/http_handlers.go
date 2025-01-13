@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/influxdata/influxdb/models"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type status struct {
@@ -483,6 +485,42 @@ func (h *HTTP) handleProm(w http.ResponseWriter, r *http.Request, _ time.Time) {
 	if errResponse == nil {
 		// Failed to make any valid request...
 		jsonResponse(w, response{http.StatusServiceUnavailable, "unable to write points"})
+		return
+	}
+}
+
+type bufferSizeRequestsCollector struct {
+	bufferSize               float64
+	bufferSizeRequestsMetric *prometheus.Desc
+}
+
+func newBufferSizeRequestsCollector() *bufferSizeRequestsCollector {
+	collector := &bufferSizeRequestsCollector{
+		bufferSizeRequestsMetric: prometheus.NewDesc(
+			"buffer_size",
+			"Current buffer size",
+			nil,
+			nil,
+		),
+	}
+	prometheus.MustRegister(collector)
+	return collector
+}
+
+func (collector *bufferSizeRequestsCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- collector.bufferSizeRequestsMetric
+}
+
+func (collector *bufferSizeRequestsCollector) Collect(ch chan<- prometheus.Metric) {
+	bufferMetric := prometheus.MustNewConstMetric(collector.bufferSizeRequestsMetric, prometheus.GaugeValue, collector.bufferSize)
+	ch <- bufferMetric
+}
+
+func (h *HTTP) handleMetrics(w http.ResponseWriter, r *http.Request, _ time.Time) {
+	if r.Method == http.MethodGet || r.Method == http.MethodHead {
+		promhttp.Handler().ServeHTTP(w, r)
+	} else {
+		jsonResponse(w, response{http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed)})
 		return
 	}
 }

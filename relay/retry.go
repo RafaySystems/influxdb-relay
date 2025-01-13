@@ -160,6 +160,7 @@ func newBatch(buf []byte, query string, auth string, endpoint string) *batch {
 type bufferList struct {
 	cond     *sync.Cond
 	head     *batch
+	metric   *bufferSizeRequestsCollector
 	size     int
 	maxSize  int
 	maxBatch int
@@ -168,11 +169,11 @@ type bufferList struct {
 func newBufferList(maxSize, maxBatch int) *bufferList {
 	return &bufferList{
 		cond:     sync.NewCond(new(sync.Mutex)),
+		metric:   newBufferSizeRequestsCollector(),
 		maxSize:  maxSize,
 		maxBatch: maxBatch,
 	}
 }
-
 
 // Empty the buffer to drop any buffered query
 // This allows to flush 'impossible' queries which loop infinitely
@@ -192,6 +193,7 @@ func (l *bufferList) pop() *batch {
 	b := l.head
 	l.head = l.head.next
 	l.size -= b.size
+	l.metric.bufferSize = float64(l.size)
 
 	l.cond.L.Unlock()
 
@@ -207,6 +209,7 @@ func (l *bufferList) add(buf []byte, query string, auth string, endpoint string)
 	}
 
 	l.size += len(buf)
+	l.metric.bufferSize = float64(l.size)
 	l.cond.Signal()
 
 	var cur **batch

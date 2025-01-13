@@ -187,7 +187,6 @@ func (r *retryBuffer) empty() {
 // pop will remove and return the first element of the list, blocking if necessary
 func (l *bufferList) pop() *batch {
 	log.Print("in pop()")
-	l.size = 10000000
 	l.cond.L.Lock()
 
 	for l.size == 0 {

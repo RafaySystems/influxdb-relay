@@ -395,6 +395,7 @@ func newHTTPBackend(cfg *config.HTTPOutputConfig, fs config.Filters) (*httpBacke
 
 	// Get underlying Poster instance
 	var p poster = newSimplePoster(cfg.Location, timeout, cfg.SkipTLSVerification)
+	metric := newBufferSizeRequestsCollector()
 
 	// If configured, create a retryBuffer per backend.
 	// This way we serialize retries against each backend.
@@ -413,7 +414,7 @@ func newHTTPBackend(cfg *config.HTTPOutputConfig, fs config.Filters) (*httpBacke
 			batch = cfg.MaxBatchKB * KB
 		}
 
-		p = newRetryBuffer(cfg.BufferSizeMB*MB, batch, max, p)
+		p = newRetryBuffer(cfg.BufferSizeMB*MB, batch, max, p, metric)
 	}
 
 	var tagRegexps []*regexp.Regexp

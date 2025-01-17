@@ -129,6 +129,8 @@ func NewHTTP(cfg config.HTTPConfig, verbose bool, fs config.Filters) (Relay, err
 	collector := newBufferSizeRequestsCollector()
 	// For each output specified in the config, we are going to create a backend
 	for i := range cfg.Outputs {
+		collector.dbName = cfg.Outputs[i].Name
+		collector.maxBufferSize = cfg.Outputs[i].BufferSizeMB * MB
 		backend, err := newHTTPBackend(&cfg.Outputs[i], fs, collector)
 		if err != nil {
 			return nil, err
@@ -375,7 +377,6 @@ func (b *httpBackend) getRetryBuffer() *retryBuffer {
 }
 
 func newHTTPBackend(cfg *config.HTTPOutputConfig, fs config.Filters, collector *bufferSizeRequestsCollector) (*httpBackend, error) {
-	log.Print("in newHTTPBackend() cfg=%+v, fs=%+v, collector=%+v", cfg, fs, collector)
 	// Get default name
 	if cfg.Name == "" {
 		cfg.Name = cfg.Location

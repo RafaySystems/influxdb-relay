@@ -491,14 +491,13 @@ func (h *HTTP) handleProm(w http.ResponseWriter, r *http.Request, _ time.Time) {
 
 type bufferSizeRequestsCollector struct {
 	dbName                  string
-	currentBufferSize       float64
-	maxBufferSize           float64
+	currentBufferSize       int
+	maxBufferSize           int
 	currentBufferSizeMetric *prometheus.Desc
 	maxBufferSizeMetric     *prometheus.Desc
 }
 
 func newBufferSizeRequestsCollector() *bufferSizeRequestsCollector {
-	log.Print("in newBufferSizeRequestsCollector()")
 	collector := &bufferSizeRequestsCollector{
 		currentBufferSizeMetric: prometheus.NewDesc(
 			"relay_current_buffer_size",
@@ -514,32 +513,25 @@ func newBufferSizeRequestsCollector() *bufferSizeRequestsCollector {
 		),
 	}
 	prometheus.MustRegister(collector)
-	log.Printf("in newBufferSizeRequestsCollector() collector=%+v", collector)
 	return collector
 }
 
 func (collector *bufferSizeRequestsCollector) Describe(ch chan<- *prometheus.Desc) {
-	log.Printf("in Describe() collector.currentBufferSizeMetric=%+v collector.maxBufferSizeMetric=%+v", collector.currentBufferSizeMetric, collector.maxBufferSizeMetric)
 	ch <- collector.currentBufferSizeMetric
 	ch <- collector.maxBufferSizeMetric
 }
 
 func (collector *bufferSizeRequestsCollector) Collect(ch chan<- prometheus.Metric) {
-	currentBufferSizeMetric := prometheus.MustNewConstMetric(collector.currentBufferSizeMetric, prometheus.GaugeValue, collector.currentBufferSize, collector.dbName)
-	maxBufferSizeMetric := prometheus.MustNewConstMetric(collector.maxBufferSizeMetric, prometheus.GaugeValue, collector.maxBufferSize, collector.dbName)
-	log.Printf("in Collect() currentBufferSizeMetric=%+v collector.currentBufferSize=%+v, collector.dbName=%+v", currentBufferSizeMetric, collector.currentBufferSize, collector.dbName)
-	log.Printf("in Collect() maxBufferSizeMetric=%+v collector.maxBufferSize=%+v, collector.dbName=%+v", maxBufferSizeMetric, collector.maxBufferSize, collector.dbName)
+	currentBufferSizeMetric := prometheus.MustNewConstMetric(collector.currentBufferSizeMetric, prometheus.GaugeValue, float64(collector.currentBufferSize), collector.dbName)
+	maxBufferSizeMetric := prometheus.MustNewConstMetric(collector.maxBufferSizeMetric, prometheus.GaugeValue, float64(collector.maxBufferSize), collector.dbName)
 	ch <- currentBufferSizeMetric
 	ch <- maxBufferSizeMetric
 }
 
 func (h *HTTP) handleMetrics(w http.ResponseWriter, r *http.Request, _ time.Time) {
-	log.Printf("in handleMetrics() r=%+v", r)
 	if r.Method == http.MethodGet || r.Method == http.MethodHead {
-		log.Print("in handleMetrics() calling promhttp.Hanlder()")
 		promhttp.Handler().ServeHTTP(w, r)
 	} else {
-		log.Print("in handleMetrics() calling jsonResponse()")
 		jsonResponse(w, response{http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed)})
 		return
 	}

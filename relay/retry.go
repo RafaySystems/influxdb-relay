@@ -2,7 +2,6 @@ package relay
 
 import (
 	"bytes"
-	"log"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -168,7 +167,6 @@ type bufferList struct {
 }
 
 func newBufferList(maxSize, maxBatch int, collector *bufferSizeRequestsCollector) *bufferList {
-	log.Printf("in newBufferList() maxSize=%v, maxBatch=%v", maxSize, maxBatch)
 	return &bufferList{
 		cond:      sync.NewCond(new(sync.Mutex)),
 		collector: collector,
@@ -186,7 +184,6 @@ func (r *retryBuffer) empty() {
 
 // pop will remove and return the first element of the list, blocking if necessary
 func (l *bufferList) pop() *batch {
-	log.Print("in pop()")
 	l.cond.L.Lock()
 
 	for l.size == 0 {
@@ -196,10 +193,7 @@ func (l *bufferList) pop() *batch {
 	b := l.head
 	l.head = l.head.next
 	l.size -= b.size
-	l.collector.dbName = "dbValue"
-	l.collector.currentBufferSize = float64(l.size)
-	l.collector.maxBufferSize = float64(l.maxSize)
-	log.Printf("in pop() l=%+v", l)
+	l.collector.currentBufferSize = l.size
 
 	l.cond.L.Unlock()
 
@@ -207,7 +201,6 @@ func (l *bufferList) pop() *batch {
 }
 
 func (l *bufferList) add(buf []byte, query string, auth string, endpoint string) (*batch, error) {
-	log.Print("in add()")
 	l.cond.L.Lock()
 
 	if l.size+len(buf) > l.maxSize {
@@ -216,10 +209,7 @@ func (l *bufferList) add(buf []byte, query string, auth string, endpoint string)
 	}
 
 	l.size += len(buf)
-	l.collector.dbName = "dbValue"
-	l.collector.currentBufferSize = float64(l.size)
-	l.collector.maxBufferSize = float64(l.maxSize)
-	log.Printf("in add() l=%+v", l)
+	l.collector.currentBufferSize = l.size
 	l.cond.Signal()
 
 	var cur **batch

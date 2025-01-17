@@ -37,14 +37,14 @@ type retryBuffer struct {
 	p poster
 }
 
-func newRetryBuffer(size, batch int, max time.Duration, p poster, metric *bufferSizeRequestsCollector) *retryBuffer {
+func newRetryBuffer(size, batch int, max time.Duration, p poster, collector *bufferSizeRequestsCollector) *retryBuffer {
 	r := &retryBuffer{
 		initialInterval: retryInitial,
 		multiplier:      retryMultiplier,
 		maxInterval:     max,
 		maxBuffered:     size,
 		maxBatch:        batch,
-		list:            newBufferList(size, batch, metric),
+		list:            newBufferList(size, batch, collector),
 		p:               p,
 	}
 	go r.run()
@@ -159,21 +159,21 @@ func newBatch(buf []byte, query string, auth string, endpoint string) *batch {
 }
 
 type bufferList struct {
-	cond     *sync.Cond
-	head     *batch
-	metric   *bufferSizeRequestsCollector
-	size     int
-	maxSize  int
-	maxBatch int
+	cond      *sync.Cond
+	head      *batch
+	collector *bufferSizeRequestsCollector
+	size      int
+	maxSize   int
+	maxBatch  int
 }
 
-func newBufferList(maxSize, maxBatch int, metric *bufferSizeRequestsCollector) *bufferList {
+func newBufferList(maxSize, maxBatch int, collector *bufferSizeRequestsCollector) *bufferList {
 	log.Printf("in newBufferList() maxSize=%v, maxBatch=%v", maxSize, maxBatch)
 	return &bufferList{
-		cond:     sync.NewCond(new(sync.Mutex)),
-		metric:   metric,
-		maxSize:  maxSize,
-		maxBatch: maxBatch,
+		cond:      sync.NewCond(new(sync.Mutex)),
+		collector: collector,
+		maxSize:   maxSize,
+		maxBatch:  maxBatch,
 	}
 }
 
@@ -196,7 +196,9 @@ func (l *bufferList) pop() *batch {
 	b := l.head
 	l.head = l.head.next
 	l.size -= b.size
-	l.metric.bufferSize = float64(l.size)
+	l.collector.dbName = "dbValue"
+	l.collector.currentBufferSize = float64(l.size)
+	l.collector.maxBufferSize = float64(l.maxSize)
 	log.Printf("in pop() l=%+v", l)
 
 	l.cond.L.Unlock()
@@ -214,7 +216,9 @@ func (l *bufferList) add(buf []byte, query string, auth string, endpoint string)
 	}
 
 	l.size += len(buf)
-	l.metric.bufferSize = float64(l.size)
+	l.collector.dbName = "dbValue"
+	l.collector.currentBufferSize = float64(l.size)
+	l.collector.maxBufferSize = float64(l.maxSize)
 	log.Printf("in add() l=%+v", l)
 	l.cond.Signal()
 

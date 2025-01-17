@@ -2,7 +2,6 @@ package relay
 
 import (
 	"bytes"
-	"log"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -203,7 +202,7 @@ func (l *bufferList) pop() *batch {
 
 func (l *bufferList) add(buf []byte, query string, auth string, endpoint string) (*batch, error) {
 	l.cond.L.Lock()
-	log.Printf("in add() l.size=%v, len(buf)=%v", l.size, len(buf))
+
 	if l.size+len(buf) > l.maxSize {
 		l.cond.L.Unlock()
 		return nil, ErrBufferFull

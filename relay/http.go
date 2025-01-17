@@ -126,10 +126,9 @@ func NewHTTP(cfg config.HTTPConfig, verbose bool, fs config.Filters) (Relay, err
 	}
 
 	h.typedBackends = make(map[string][]*httpBackend)
-	collector := newBufferSizeRequestsCollector()
 	// For each output specified in the config, we are going to create a backend
 	for i := range cfg.Outputs {
-		collector.dbName = cfg.Outputs[i].Name
+		collector := newBufferSizeRequestsCollector(cfg.Outputs[i].Name)
 		collector.maxBufferSize = cfg.Outputs[i].BufferSizeMB * MB
 		backend, err := newHTTPBackend(&cfg.Outputs[i], fs, collector)
 		if err != nil {

@@ -128,9 +128,7 @@ func NewHTTP(cfg config.HTTPConfig, verbose bool, fs config.Filters) (Relay, err
 	h.typedBackends = make(map[string][]*httpBackend)
 	// For each output specified in the config, we are going to create a backend
 	for i := range cfg.Outputs {
-		collector := newBufferSizeRequestsCollector(cfg.Outputs[i].Name)
-		collector.maxBufferSize = cfg.Outputs[i].BufferSizeMB * MB * 1024 * 1024
-		backend, err := newHTTPBackend(&cfg.Outputs[i], fs, collector)
+		backend, err := newHTTPBackend(&cfg.Outputs[i], fs)
 		if err != nil {
 			return nil, err
 		}
@@ -375,7 +373,7 @@ func (b *httpBackend) getRetryBuffer() *retryBuffer {
 	return nil
 }
 
-func newHTTPBackend(cfg *config.HTTPOutputConfig, fs config.Filters, collector *bufferSizeRequestsCollector) (*httpBackend, error) {
+func newHTTPBackend(cfg *config.HTTPOutputConfig, fs config.Filters) (*httpBackend, error) {
 	// Get default name
 	if cfg.Name == "" {
 		cfg.Name = cfg.Location
@@ -415,6 +413,8 @@ func newHTTPBackend(cfg *config.HTTPOutputConfig, fs config.Filters, collector *
 			batch = cfg.MaxBatchKB * KB
 		}
 
+		collector := newBufferSizeRequestsCollector(cfg.Name)
+		collector.maxBufferSize = cfg.BufferSizeMB * MB
 		p = newRetryBuffer(cfg.BufferSizeMB*MB, batch, max, p, collector)
 	}
 

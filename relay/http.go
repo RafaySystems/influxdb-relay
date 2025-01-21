@@ -220,6 +220,7 @@ func (h *HTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		allMiddlewares(h, fun)(h, w, r, time.Now())
 	} else {
 		jsonResponse(w, response{http.StatusNotFound, http.StatusText(http.StatusNotFound)})
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusNotFound)).Inc()
 		return
 	}
 }

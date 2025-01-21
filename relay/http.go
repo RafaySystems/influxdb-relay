@@ -21,6 +21,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/influxdata/influxdb/models"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/strike-team/influxdb-relay/config"
 )
 
@@ -91,6 +92,14 @@ var (
 		(*HTTP).logMiddleWare,
 		(*HTTP).rateMiddleware,
 	}
+
+	httpRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_requests_total",
+			Help: "Total number of HTTP requests",
+		},
+		[]string{"method", "status"},
+	)
 )
 
 // NewHTTP creates a new HTTP relay
@@ -135,6 +144,7 @@ func NewHTTP(cfg config.HTTPConfig, verbose bool, fs config.Filters) (Relay, err
 		h.typedBackends[backend.urlType] = append(h.typedBackends[backend.urlType], backend)
 		h.backends = append(h.backends, backend)
 	}
+	prometheus.MustRegister(httpRequestsTotal)
 	fmt.Println(h.typedBackends)
 
 	// If a RateLimit is specified, create a new limiter

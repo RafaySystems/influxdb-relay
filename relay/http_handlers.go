@@ -27,10 +27,10 @@ func (h *HTTP) handleStatus(w http.ResponseWriter, r *http.Request, _ time.Time)
 		}
 
 		jsonResponse(w, response{http.StatusOK, st})
-		httpRequestsTotal.WithLabelValues(r.Method, http.StatusText(http.StatusOK)).Inc()
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusOK)).Inc()
 	} else {
 		jsonResponse(w, response{http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed)})
-		httpRequestsTotal.WithLabelValues(r.Method, http.StatusText(http.StatusMethodNotAllowed)).Inc()
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusMethodNotAllowed)).Inc()
 		return
 	}
 }
@@ -41,10 +41,10 @@ func (h *HTTP) handlePing(w http.ResponseWriter, r *http.Request, _ time.Time) {
 			w.Header().Add(key, value)
 		}
 		w.WriteHeader(h.pingResponseCode)
-		httpRequestsTotal.WithLabelValues(r.Method, http.StatusText(http.StatusOK)).Inc()
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusOK)).Inc()
 	} else {
 		jsonResponse(w, response{http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed)})
-		httpRequestsTotal.WithLabelValues(r.Method, http.StatusText(http.StatusMethodNotAllowed)).Inc()
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusMethodNotAllowed)).Inc()
 		return
 	}
 }
@@ -133,7 +133,7 @@ func (h *HTTP) handleHealth(w http.ResponseWriter, r *http.Request, _ time.Time)
 	}
 	response := response{code: 200, body: report}
 	jsonResponse(w, response)
-	httpRequestsTotal.WithLabelValues(r.Method, http.StatusText(http.StatusOK)).Inc()
+	httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusOK)).Inc()
 	return
 }
 
@@ -153,7 +153,7 @@ func (h *HTTP) handleAdmin(w http.ResponseWriter, r *http.Request, _ time.Time) 
 		// Bad method
 		w.Header().Set("Allow", http.MethodPost)
 		jsonResponse(w, response{http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed)})
-		httpRequestsTotal.WithLabelValues(r.Method, http.StatusText(http.StatusMethodNotAllowed)).Inc()
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusMethodNotAllowed)).Inc()
 		return
 	}
 
@@ -234,7 +234,7 @@ func (h *HTTP) handleAdmin(w http.ResponseWriter, r *http.Request, _ time.Time) 
 	if errResponse == nil {
 		// Failed to make any valid request...
 		jsonResponse(w, response{http.StatusServiceUnavailable, "unable to forward query"})
-		httpRequestsTotal.WithLabelValues(r.Method, http.StatusText(http.StatusServiceUnavailable)).Inc()
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusServiceUnavailable)).Inc()
 		return
 	}
 }
@@ -259,7 +259,7 @@ func (h *HTTP) handleFlush(w http.ResponseWriter, r *http.Request, start time.Ti
 	}
 
 	jsonResponse(w, response{http.StatusOK, http.StatusText(http.StatusOK)})
-	httpRequestsTotal.WithLabelValues(r.Method, http.StatusText(http.StatusOK)).Inc()
+	httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusOK)).Inc()
 }
 
 func (h *HTTP) handleStandard(w http.ResponseWriter, r *http.Request, start time.Time) {
@@ -269,7 +269,7 @@ func (h *HTTP) handleStandard(w http.ResponseWriter, r *http.Request, start time
 			w.WriteHeader(http.StatusNoContent)
 		} else {
 			jsonResponse(w, response{http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed)})
-			httpRequestsTotal.WithLabelValues(r.Method, http.StatusText(http.StatusMethodNotAllowed)).Inc()
+			httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusMethodNotAllowed)).Inc()
 			return
 		}
 	}
@@ -284,7 +284,7 @@ func (h *HTTP) handleStandard(w http.ResponseWriter, r *http.Request, start time
 		putBuf(bodyBuf)
 		log.Printf("parse points error: %s", err)
 		jsonResponse(w, response{http.StatusBadRequest, "unable to parse points"})
-		httpRequestsTotal.WithLabelValues(r.Method, http.StatusText(http.StatusBadRequest)).Inc()
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusBadRequest)).Inc()
 		return
 	}
 
@@ -387,7 +387,7 @@ func (h *HTTP) handleStandard(w http.ResponseWriter, r *http.Request, start time
 	if errResponse == nil {
 		// Failed to make any valid request...
 		jsonResponse(w, response{http.StatusServiceUnavailable, "unable to write points"})
-		httpRequestsTotal.WithLabelValues(r.Method, http.StatusText(http.StatusServiceUnavailable)).Inc()
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusServiceUnavailable)).Inc()
 		return
 	}
 }
@@ -400,7 +400,7 @@ func (h *HTTP) handleProm(w http.ResponseWriter, r *http.Request, _ time.Time) {
 			w.WriteHeader(http.StatusNoContent)
 		} else {
 			jsonResponse(w, response{http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed)})
-			httpRequestsTotal.WithLabelValues(r.Method, http.StatusText(http.StatusMethodNotAllowed)).Inc()
+			httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusMethodNotAllowed)).Inc()
 			return
 		}
 	}
@@ -497,7 +497,7 @@ func (h *HTTP) handleProm(w http.ResponseWriter, r *http.Request, _ time.Time) {
 	if errResponse == nil {
 		// Failed to make any valid request...
 		jsonResponse(w, response{http.StatusServiceUnavailable, "unable to write points"})
-		httpRequestsTotal.WithLabelValues(r.Method, http.StatusText(http.StatusServiceUnavailable)).Inc()
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusServiceUnavailable)).Inc()
 		return
 	}
 }
@@ -545,7 +545,7 @@ func (h *HTTP) handleMetrics(w http.ResponseWriter, r *http.Request, _ time.Time
 		promhttp.Handler().ServeHTTP(w, r)
 	} else {
 		jsonResponse(w, response{http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed)})
-		httpRequestsTotal.WithLabelValues(r.Method, http.StatusText(http.StatusMethodNotAllowed)).Inc()
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusMethodNotAllowed)).Inc()
 		return
 	}
 }

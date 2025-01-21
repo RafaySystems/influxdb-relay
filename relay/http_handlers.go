@@ -217,11 +217,13 @@ func (h *HTTP) handleAdmin(w http.ResponseWriter, r *http.Request, _ time.Time) 
 		switch resp.StatusCode / 100 {
 		case 2:
 			w.WriteHeader(http.StatusNoContent)
+			httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusNoContent)).Inc()
 			return
 
 		case 4:
 			// User error
 			resp.Write(w)
+			httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusBadRequest)).Inc()
 			return
 
 		default:
@@ -366,15 +368,18 @@ func (h *HTTP) handleStandard(w http.ResponseWriter, r *http.Request, start time
 				}
 
 				w.WriteHeader(http.StatusAccepted)
+				httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusAccepted)).Inc()
 				return
 			}
 
 			w.WriteHeader(http.StatusNoContent)
+			httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusNoContent)).Inc()
 			return
 
 		case 4:
 			// User error
 			resp.Write(w)
+			httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusBadRequest)).Inc()
 			return
 
 		default:
@@ -476,15 +481,18 @@ func (h *HTTP) handleProm(w http.ResponseWriter, r *http.Request, _ time.Time) {
 					h.logger.Printf("could not reach relay %q, buffering...", h.Name())
 				}
 				w.WriteHeader(http.StatusAccepted)
+				httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusAccepted)).Inc()
 				return
 			}
 
 			w.WriteHeader(http.StatusNoContent)
+			httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusNoContent)).Inc()
 			return
 
 		case 4:
 			// User error
 			resp.Write(w)
+			httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusBadRequest)).Inc()
 			return
 
 		default:
@@ -543,6 +551,7 @@ func (collector *bufferSizeRequestsCollector) Collect(ch chan<- prometheus.Metri
 func (h *HTTP) handleMetrics(w http.ResponseWriter, r *http.Request, _ time.Time) {
 	if r.Method == http.MethodGet || r.Method == http.MethodHead {
 		promhttp.Handler().ServeHTTP(w, r)
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusOK)).Inc()
 	} else {
 		jsonResponse(w, response{http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed)})
 		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusMethodNotAllowed)).Inc()

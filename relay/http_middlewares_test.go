@@ -3,14 +3,16 @@ package relay
 import (
 	"bytes"
 	"compress/gzip"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"testing"
 
+	"time"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/strike-team/influxdb-relay/config"
-	"time"
 )
 
 // Body is an empty body which implements io.Reader in order to create valid http.Requests
@@ -128,6 +130,14 @@ func WriterTest(t *testing.T, expected *ResponseWriter, actual *ResponseWriter) 
 	expectedBuf, _ := ioutil.ReadAll(expected.writeBuf)
 	actualBuf, _ := ioutil.ReadAll(actual.writeBuf)
 	assert.Equal(t, string(expectedBuf), string(actualBuf))
+	assert.Equal(t, expected.header, actual.header)
+}
+
+func MetricsWriterTest(t *testing.T, expected *ResponseWriter, actual *ResponseWriter) {
+	assert.Equal(t, expected.code, actual.code)
+	expectedBuf, _ := io.ReadAll(expected.writeBuf)
+	actualBuf, _ := io.ReadAll(actual.writeBuf)
+	assert.Contains(t, string(actualBuf), string(expectedBuf))
 	assert.Equal(t, expected.header, actual.header)
 }
 

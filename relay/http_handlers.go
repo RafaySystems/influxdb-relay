@@ -520,14 +520,14 @@ type bufferSizeRequestsCollector struct {
 func newBufferSizeRequestsCollector(name string) *bufferSizeRequestsCollector {
 	collector := &bufferSizeRequestsCollector{
 		currentBufferSizeMetric: prometheus.NewDesc(
-			"relay_current_buffer_size",
-			"Current relay buffer size",
+			"influxrelay_current_buffer_size",
+			"Current Influx relay buffer size",
 			nil,
 			prometheus.Labels{"dbname": name},
 		),
 		maxBufferSizeMetric: prometheus.NewDesc(
-			"relay_max_buffer_size",
-			"Maximum relay buffer size",
+			"influxrelay_max_buffer_size",
+			"Maximum Influx relay buffer size",
 			nil,
 			prometheus.Labels{"dbname": name},
 		),

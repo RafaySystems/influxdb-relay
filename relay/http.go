@@ -95,8 +95,8 @@ var (
 
 	httpRequestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "relay_http_requests_total",
-			Help: "Total number of HTTP requests",
+			Name: "influxrelay_http_requests_total",
+			Help: "Total number of HTTP requests to the Influx relay",
 		},
 		[]string{"method", "status"},
 	)

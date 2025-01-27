@@ -36,14 +36,14 @@ type retryBuffer struct {
 	p poster
 }
 
-func newRetryBuffer(size, batch int, max time.Duration, p poster) *retryBuffer {
+func newRetryBuffer(size, batch int, max time.Duration, p poster, collector *bufferSizeRequestsCollector) *retryBuffer {
 	r := &retryBuffer{
 		initialInterval: retryInitial,
 		multiplier:      retryMultiplier,
 		maxInterval:     max,
 		maxBuffered:     size,
 		maxBatch:        batch,
-		list:            newBufferList(size, batch),
+		list:            newBufferList(size, batch, collector),
 		p:               p,
 	}
 	go r.run()
@@ -158,21 +158,22 @@ func newBatch(buf []byte, query string, auth string, endpoint string) *batch {
 }
 
 type bufferList struct {
-	cond     *sync.Cond
-	head     *batch
-	size     int
-	maxSize  int
-	maxBatch int
+	cond      *sync.Cond
+	head      *batch
+	collector *bufferSizeRequestsCollector
+	size      int
+	maxSize   int
+	maxBatch  int
 }
 
-func newBufferList(maxSize, maxBatch int) *bufferList {
+func newBufferList(maxSize, maxBatch int, collector *bufferSizeRequestsCollector) *bufferList {
 	return &bufferList{
-		cond:     sync.NewCond(new(sync.Mutex)),
-		maxSize:  maxSize,
-		maxBatch: maxBatch,
+		cond:      sync.NewCond(new(sync.Mutex)),
+		collector: collector,
+		maxSize:   maxSize,
+		maxBatch:  maxBatch,
 	}
 }
-
 
 // Empty the buffer to drop any buffered query
 // This allows to flush 'impossible' queries which loop infinitely
@@ -192,6 +193,7 @@ func (l *bufferList) pop() *batch {
 	b := l.head
 	l.head = l.head.next
 	l.size -= b.size
+	l.collector.currentBufferSize = l.size
 
 	l.cond.L.Unlock()
 
@@ -207,6 +209,7 @@ func (l *bufferList) add(buf []byte, query string, auth string, endpoint string)
 	}
 
 	l.size += len(buf)
+	l.collector.currentBufferSize = l.size
 	l.cond.Signal()
 
 	var cur **batch

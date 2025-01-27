@@ -3,6 +3,7 @@ package relay
 import (
 	"compress/gzip"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -32,6 +33,7 @@ func (h *HTTP) bodyMiddleWare(next relayHandlerFunc) relayHandlerFunc {
 			b, err := gzip.NewReader(r.Body)
 			if err != nil {
 				jsonResponse(w, response{http.StatusBadRequest, "unable to decode gzip body"})
+				httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusBadRequest)).Inc()
 				return
 			}
 			defer b.Close()
@@ -49,6 +51,7 @@ func (h *HTTP) queryMiddleWare(next relayHandlerFunc) relayHandlerFunc {
 
 		if queryParams.Get("db") == "" && (r.URL.Path == "/write" || r.URL.Path == "/api/v1/prom/write") {
 			jsonResponse(w, response{http.StatusBadRequest, "missing parameter: db"})
+			httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusBadRequest)).Inc()
 			return
 		}
 
@@ -66,6 +69,7 @@ func (h *HTTP) rateMiddleware(next relayHandlerFunc) relayHandlerFunc {
 	return relayHandlerFunc(func(h *HTTP, w http.ResponseWriter, r *http.Request, start time.Time) {
 		if h.rateLimiter != nil && !h.rateLimiter.Allow() {
 			jsonResponse(w, response{http.StatusTooManyRequests, http.StatusText(http.StatusTooManyRequests)})
+			httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusTooManyRequests)).Inc()
 			return
 		}
 

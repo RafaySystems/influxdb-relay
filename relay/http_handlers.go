@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/influxdata/influxdb/models"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type status struct {
@@ -25,8 +27,10 @@ func (h *HTTP) handleStatus(w http.ResponseWriter, r *http.Request, _ time.Time)
 		}
 
 		jsonResponse(w, response{http.StatusOK, st})
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusOK)).Inc()
 	} else {
 		jsonResponse(w, response{http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed)})
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusMethodNotAllowed)).Inc()
 		return
 	}
 }
@@ -37,8 +41,10 @@ func (h *HTTP) handlePing(w http.ResponseWriter, r *http.Request, _ time.Time) {
 			w.Header().Add(key, value)
 		}
 		w.WriteHeader(h.pingResponseCode)
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusOK)).Inc()
 	} else {
 		jsonResponse(w, response{http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed)})
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusMethodNotAllowed)).Inc()
 		return
 	}
 }
@@ -55,7 +61,7 @@ type healthReport struct {
 	Problem map[string]string `json:"problem,omitempty"`
 }
 
-func (h *HTTP) handleHealth(w http.ResponseWriter, _ *http.Request, _ time.Time) {
+func (h *HTTP) handleHealth(w http.ResponseWriter, r *http.Request, _ time.Time) {
 	var responses = make(chan health, len(h.backends))
 	var wg sync.WaitGroup
 	var validEndpoints = 0
@@ -127,6 +133,7 @@ func (h *HTTP) handleHealth(w http.ResponseWriter, _ *http.Request, _ time.Time)
 	}
 	response := response{code: 200, body: report}
 	jsonResponse(w, response)
+	httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusOK)).Inc()
 	return
 }
 
@@ -146,6 +153,7 @@ func (h *HTTP) handleAdmin(w http.ResponseWriter, r *http.Request, _ time.Time) 
 		// Bad method
 		w.Header().Set("Allow", http.MethodPost)
 		jsonResponse(w, response{http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed)})
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusMethodNotAllowed)).Inc()
 		return
 	}
 
@@ -209,11 +217,13 @@ func (h *HTTP) handleAdmin(w http.ResponseWriter, r *http.Request, _ time.Time) 
 		switch resp.StatusCode / 100 {
 		case 2:
 			w.WriteHeader(http.StatusNoContent)
+			httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusNoContent)).Inc()
 			return
 
 		case 4:
 			// User error
 			resp.Write(w)
+			httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusBadRequest)).Inc()
 			return
 
 		default:
@@ -226,6 +236,7 @@ func (h *HTTP) handleAdmin(w http.ResponseWriter, r *http.Request, _ time.Time) 
 	if errResponse == nil {
 		// Failed to make any valid request...
 		jsonResponse(w, response{http.StatusServiceUnavailable, "unable to forward query"})
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusServiceUnavailable)).Inc()
 		return
 	}
 }
@@ -250,6 +261,7 @@ func (h *HTTP) handleFlush(w http.ResponseWriter, r *http.Request, start time.Ti
 	}
 
 	jsonResponse(w, response{http.StatusOK, http.StatusText(http.StatusOK)})
+	httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusOK)).Inc()
 }
 
 func (h *HTTP) handleStandard(w http.ResponseWriter, r *http.Request, start time.Time) {
@@ -259,6 +271,7 @@ func (h *HTTP) handleStandard(w http.ResponseWriter, r *http.Request, start time
 			w.WriteHeader(http.StatusNoContent)
 		} else {
 			jsonResponse(w, response{http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed)})
+			httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusMethodNotAllowed)).Inc()
 			return
 		}
 	}
@@ -273,6 +286,7 @@ func (h *HTTP) handleStandard(w http.ResponseWriter, r *http.Request, start time
 		putBuf(bodyBuf)
 		log.Printf("parse points error: %s", err)
 		jsonResponse(w, response{http.StatusBadRequest, "unable to parse points"})
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusBadRequest)).Inc()
 		return
 	}
 
@@ -354,15 +368,18 @@ func (h *HTTP) handleStandard(w http.ResponseWriter, r *http.Request, start time
 				}
 
 				w.WriteHeader(http.StatusAccepted)
+				httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusAccepted)).Inc()
 				return
 			}
 
 			w.WriteHeader(http.StatusNoContent)
+			httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusNoContent)).Inc()
 			return
 
 		case 4:
 			// User error
 			resp.Write(w)
+			httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusBadRequest)).Inc()
 			return
 
 		default:
@@ -375,6 +392,7 @@ func (h *HTTP) handleStandard(w http.ResponseWriter, r *http.Request, start time
 	if errResponse == nil {
 		// Failed to make any valid request...
 		jsonResponse(w, response{http.StatusServiceUnavailable, "unable to write points"})
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusServiceUnavailable)).Inc()
 		return
 	}
 }
@@ -387,6 +405,7 @@ func (h *HTTP) handleProm(w http.ResponseWriter, r *http.Request, _ time.Time) {
 			w.WriteHeader(http.StatusNoContent)
 		} else {
 			jsonResponse(w, response{http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed)})
+			httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusMethodNotAllowed)).Inc()
 			return
 		}
 	}
@@ -462,15 +481,18 @@ func (h *HTTP) handleProm(w http.ResponseWriter, r *http.Request, _ time.Time) {
 					h.logger.Printf("could not reach relay %q, buffering...", h.Name())
 				}
 				w.WriteHeader(http.StatusAccepted)
+				httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusAccepted)).Inc()
 				return
 			}
 
 			w.WriteHeader(http.StatusNoContent)
+			httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusNoContent)).Inc()
 			return
 
 		case 4:
 			// User error
 			resp.Write(w)
+			httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusBadRequest)).Inc()
 			return
 
 		default:
@@ -483,6 +505,56 @@ func (h *HTTP) handleProm(w http.ResponseWriter, r *http.Request, _ time.Time) {
 	if errResponse == nil {
 		// Failed to make any valid request...
 		jsonResponse(w, response{http.StatusServiceUnavailable, "unable to write points"})
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusServiceUnavailable)).Inc()
+		return
+	}
+}
+
+type bufferSizeRequestsCollector struct {
+	currentBufferSize       int
+	maxBufferSize           int
+	currentBufferSizeMetric *prometheus.Desc
+	maxBufferSizeMetric     *prometheus.Desc
+}
+
+func newBufferSizeRequestsCollector(name string) *bufferSizeRequestsCollector {
+	collector := &bufferSizeRequestsCollector{
+		currentBufferSizeMetric: prometheus.NewDesc(
+			"influxrelay_current_buffer_size",
+			"Current Influx relay buffer size",
+			nil,
+			prometheus.Labels{"dbname": name},
+		),
+		maxBufferSizeMetric: prometheus.NewDesc(
+			"influxrelay_max_buffer_size",
+			"Maximum Influx relay buffer size",
+			nil,
+			prometheus.Labels{"dbname": name},
+		),
+	}
+	prometheus.MustRegister(collector)
+	return collector
+}
+
+func (collector *bufferSizeRequestsCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- collector.currentBufferSizeMetric
+	ch <- collector.maxBufferSizeMetric
+}
+
+func (collector *bufferSizeRequestsCollector) Collect(ch chan<- prometheus.Metric) {
+	currentBufferSizeMetric := prometheus.MustNewConstMetric(collector.currentBufferSizeMetric, prometheus.GaugeValue, float64(collector.currentBufferSize))
+	maxBufferSizeMetric := prometheus.MustNewConstMetric(collector.maxBufferSizeMetric, prometheus.GaugeValue, float64(collector.maxBufferSize))
+	ch <- currentBufferSizeMetric
+	ch <- maxBufferSizeMetric
+}
+
+func (h *HTTP) handleMetrics(w http.ResponseWriter, r *http.Request, _ time.Time) {
+	if r.Method == http.MethodGet || r.Method == http.MethodHead {
+		promhttp.Handler().ServeHTTP(w, r)
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusOK)).Inc()
+	} else {
+		jsonResponse(w, response{http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed)})
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusMethodNotAllowed)).Inc()
 		return
 	}
 }

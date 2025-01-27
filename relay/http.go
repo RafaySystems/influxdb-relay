@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"golang.org/x/time/rate"
 	"io/ioutil"
 	"log"
 	"net"
@@ -19,7 +18,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"github.com/influxdata/influxdb/models"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/strike-team/influxdb-relay/config"
 )
 
@@ -81,6 +83,7 @@ var (
 		"/admin":             (*HTTP).handleAdmin,
 		"/admin/flush":       (*HTTP).handleFlush,
 		"/health":            (*HTTP).handleHealth,
+		"/metrics":           (*HTTP).handleMetrics,
 	}
 
 	middlewares = []relayMiddleware{
@@ -89,6 +92,14 @@ var (
 		(*HTTP).logMiddleWare,
 		(*HTTP).rateMiddleware,
 	}
+
+	httpRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "influxrelay_http_requests_total",
+			Help: "Total number of HTTP requests to the Influx relay",
+		},
+		[]string{"method", "status"},
+	)
 )
 
 // NewHTTP creates a new HTTP relay
@@ -133,6 +144,7 @@ func NewHTTP(cfg config.HTTPConfig, verbose bool, fs config.Filters) (Relay, err
 		h.typedBackends[backend.urlType] = append(h.typedBackends[backend.urlType], backend)
 		h.backends = append(h.backends, backend)
 	}
+	prometheus.MustRegister(httpRequestsTotal)
 	fmt.Println(h.typedBackends)
 
 	// If a RateLimit is specified, create a new limiter
@@ -208,6 +220,7 @@ func (h *HTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		allMiddlewares(h, fun)(h, w, r, time.Now())
 	} else {
 		jsonResponse(w, response{http.StatusNotFound, http.StatusText(http.StatusNotFound)})
+		httpRequestsTotal.WithLabelValues(r.Method, strconv.Itoa(http.StatusNotFound)).Inc()
 		return
 	}
 }
@@ -411,7 +424,9 @@ func newHTTPBackend(cfg *config.HTTPOutputConfig, fs config.Filters) (*httpBacke
 			batch = cfg.MaxBatchKB * KB
 		}
 
-		p = newRetryBuffer(cfg.BufferSizeMB*MB, batch, max, p)
+		collector := newBufferSizeRequestsCollector(cfg.Name)
+		collector.maxBufferSize = cfg.BufferSizeMB * MB
+		p = newRetryBuffer(cfg.BufferSizeMB*MB, batch, max, p, collector)
 	}
 
 	var tagRegexps []*regexp.Regexp

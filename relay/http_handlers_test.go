@@ -63,6 +63,13 @@ var (
 		},
 		code: http.StatusMethodNotAllowed,
 	}
+	basicMetricsWriter = &ResponseWriter{
+		writeBuf: bytes.NewBuffer([]byte("relay_current_buffer_size{dbname=\"test\"} 0")),
+		header: http.Header{
+			"Content-Type": []string{"text/plain; version=0.0.4; charset=utf-8; escaping=values"},
+		},
+		code: http.StatusOK,
+	}
 	wrongMethodPromWriter = &ResponseWriter{
 		writeBuf: bytes.NewBuffer([]byte("\"" + http.StatusText(http.StatusMethodNotAllowed) + "\"")),
 		header: http.Header{
@@ -313,6 +320,32 @@ func TestHandleStatusWrongMethod(t *testing.T) {
 	}
 
 	h.handleStatus(w, r, ti)
+	WriterTest(t, wrongMethodStatusWriter, w)
+}
+
+func TestHandleMetricsSimple(t *testing.T) {
+	defer resetWriter()
+	cfgOut := config.HTTPOutputConfig{Name: "test", BufferSizeMB: 500}
+	h := createHTTP(t, emptyConfig, false)
+	r, err := http.NewRequest("GET", "influxdb", emptyBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := newHTTPBackend(&cfgOut, config.Filters{})
+	h.backends = append(h.backends, b)
+	h.handleMetrics(w, r, ti)
+	MetricsWriterTest(t, basicMetricsWriter, w)
+}
+
+func TestHandleMetricsWrongMethod(t *testing.T) {
+	defer resetWriter()
+	h := createHTTP(t, emptyConfig, false)
+	r, err := http.NewRequest("OPTIONS", "influxdb", emptyBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.handleMetrics(w, r, ti)
 	WriterTest(t, wrongMethodStatusWriter, w)
 }
 
